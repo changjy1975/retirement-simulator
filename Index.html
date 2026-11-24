@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>退休規劃模擬看板</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 9999px;
+      background: #e2e8f0;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 9999px;
+      background: #0f766e;
+      cursor: pointer;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+      transition: transform 0.12s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-lg transition-all">
+    <i data-lucide="check-circle-2" class="h-4 w-4 text-emerald-400"></i>
+    <span id="toastMessage">已更新</span>
+  </div>
+
+  <!-- Top Navigation -->
+  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-700 text-white shadow-sm">
+          <i data-lucide="compass" class="h-5 w-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-slate-900">退休規劃模擬看板</h1>
+            <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">通用空白模型 · 台幣（萬元）</span>
+          </div>
+          <p class="text-xs text-slate-500">調整左側參數即時試算累積軌跡、實質購買力、壓力測試與 FIRE 達標年齡</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Nominal vs Real Toggle -->
+        <div class="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-medium">
+          <button id="btnRealMode" type="button" class="rounded-md bg-white px-3 py-1.5 text-teal-800 shadow-sm transition">
+            實質購買力（今日幣值）
+          </button>
+          <button id="btnNominalMode" type="button" class="rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900 transition">
+            名目金額（含通膨）
+          </button>
+        </div>
+
+        <!-- Import / Export / Reset -->
+        <input id="importFileInput" type="file" accept=".json" class="hidden" />
+        <button id="btnImport" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+          <i data-lucide="upload" class="h-3.5 w-3.5"></i> 匯入設定
+        </button>
+        <button id="btnExport" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+          <i data-lucide="download" class="h-3.5 w-3.5"></i> 匯出 JSON
+        </button>
+        <button id="btnReset" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 transition">
+          <i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i> 重設
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="mx-auto grid w-full max-w-[1440px] flex-1 grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-12">
+
+    <!-- Left Sidebar: Parameters -->
+    <aside class="lg:col-span-4 xl:col-span-3 space-y-4">
+      <!-- Quick Presets -->
+      <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div class="mb-2.5 flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">快速範本情境</span>
+          <span class="text-[11px] text-slate-400">一鍵套用測試</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <button type="button" data-preset="balanced" class="preset-btn rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-700 hover:border-teal-600 hover:bg-teal-50 hover:text-teal-800 transition">
+            穩健標準
+          </button>
+          <button type="button" data-preset="fire" class="preset-btn rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-700 hover:border-teal-600 hover:bg-teal-50 hover:text-teal-800 transition">
+            積極 FIRE
+          </button>
+          <button type="button" data-preset="conservative" class="preset-btn rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 text-xs font-medium text-slate-700 hover:border-teal-600 hover:bg-teal-50 hover:text-teal-800 transition">
+            保守防禦
+          </button>
+        </div>
+      </div>
+
+      <!-- Parameter Groups -->
+      <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-5">
+
+        <!-- 1. 年齡與時間軸 -->
+        <section class="space-y-3">
+          <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+            <i data-lucide="calendar" class="h-4 w-4 text-teal-700"></i>
+            <h2 class="text-sm font-semibold text-slate-800">年齡與時間軸</h2>
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="currentAge" class="font-medium text-slate-700">現有年齡</label>
+              <div class="flex items-center gap-1">
+                <input id="currentAgeNum" type="number" min="18" max="75" step="1" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">歲</span>
+              </div>
+            </div>
+            <input id="currentAge" type="range" min="18" max="75" step="1" class="w-full" />
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="retireAge" class="font-medium text-slate-700">預計退休年齡</label>
+              <div class="flex items-center gap-1">
+                <input id="retireAgeNum" type="number" min="25" max="80" step="1" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">歲</span>
+              </div>
+            </div>
+            <input id="retireAge" type="range" min="25" max="80" step="1" class="w-full" />
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="lifeExpectancy" class="font-medium text-slate-700">預期壽命</label>
+              <div class="flex items-center gap-1">
+                <input id="lifeExpectancyNum" type="number" min="60" max="105" step="1" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">歲</span>
+              </div>
+            </div>
+            <input id="lifeExpectancy" type="range" min="60" max="105" step="1" class="w-full" />
+          </div>
+        </section>
+
+        <!-- 2. 現有資金與投入 -->
+        <section class="space-y-3">
+          <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+            <i data-lucide="wallet" class="h-4 w-4 text-teal-700"></i>
+            <h2 class="text-sm font-semibold text-slate-800">現有資金與定期投入</h2>
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="currentAssets" class="font-medium text-slate-700">現有投資總資金</label>
+              <div class="flex items-center gap-1">
+                <input id="currentAssetsNum" type="number" min="0" max="10000" step="10" class="w-20 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">萬元</span>
+              </div>
+            </div>
+            <input id="currentAssets" type="range" min="0" max="3000" step="10" class="w-full" />
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="monthlyContribution" class="font-medium text-slate-700">每月定期投入</label>
+              <div class="flex items-center gap-1">
+                <input id="monthlyContributionNum" type="number" min="0" max="50" step="0.5" class="w-20 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">萬元</span>
+              </div>
+            </div>
+            <input id="monthlyContribution" type="range" min="0" max="20" step="0.5" class="w-full" />
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="contributionGrowth" class="font-medium text-slate-700">投入金額年成長率</label>
+              <div class="flex items-center gap-1">
+                <input id="contributionGrowthNum" type="number" min="0" max="15" step="0.5" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">%</span>
+              </div>
+            </div>
+            <input id="contributionGrowth" type="range" min="0" max="10" step="0.5" class="w-full" />
+          </div>
+        </section>
+
+        <!-- 3. 目標與提領設定 -->
+        <section class="space-y-3">
+          <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+            <i data-lucide="target" class="h-4 w-4 text-teal-700"></i>
+            <h2 class="text-sm font-semibold text-slate-800">目標與提領策略</h2>
+          </div>
+
+          <div>
+            <label for="targetMonthlyExpense" class="mb-1 flex items-center justify-between text-xs font-medium text-slate-700">
+              <span>退休後每月目標花費（今日幣值）</span>
+            </label>
+            <div class="mb-1 flex items-center justify-between gap-2">
+              <input id="targetMonthlyExpense" type="range" min="2" max="25" step="0.5" class="w-full" />
+              <div class="flex shrink-0 items-center gap-1 text-xs">
+                <input id="targetMonthlyExpenseNum" type="number" min="1" max="100" step="0.5" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">萬</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="withdrawalRate" class="font-medium text-slate-700">目標提領率（安全基準）</label>
+              <div class="flex items-center gap-1">
+                <input id="withdrawalRateNum" type="number" min="1" max="10" step="0.1" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">%</span>
+              </div>
+            </div>
+            <input id="withdrawalRate" type="range" min="2" max="8" step="0.1" class="w-full" />
+          </div>
+
+          <div>
+            <label for="withdrawalStrategy" class="mb-1 block text-xs font-medium text-slate-700">提領執行方式</label>
+            <select id="withdrawalStrategy" class="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs font-medium text-slate-800 focus:border-teal-600 focus:outline-none">
+              <option value="expense">依目標生活費（扣除外部給付後提領）</option>
+              <option value="rate_fixed">依設定提領率（首年按比例起領，隨通膨調整）</option>
+              <option value="guardrails">動態護欄提領（資產跌破 80% 減領 10%）</option>
+            </select>
+          </div>
+        </section>
+
+        <!-- 4. 報酬率與通膨 -->
+        <section class="space-y-3">
+          <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+            <i data-lucide="trending-up" class="h-4 w-4 text-teal-700"></i>
+            <h2 class="text-sm font-semibold text-slate-800">報酬率與通膨假設</h2>
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="accumReturn" class="font-medium text-slate-700">累積期年化報酬率</label>
+              <div class="flex items-center gap-1">
+                <input id="accumReturnNum" type="number" min="0" max="20" step="0.5" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">%</span>
+              </div>
+            </div>
+            <input id="accumReturn" type="range" min="0" max="15" step="0.5" class="w-full" />
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="retireReturn" class="font-medium text-slate-700">退休期年化報酬率</label>
+              <div class="flex items-center gap-1">
+                <input id="retireReturnNum" type="number" min="0" max="15" step="0.5" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">%</span>
+              </div>
+            </div>
+            <input id="retireReturn" type="range" min="0" max="12" step="0.5" class="w-full" />
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="inflationRate" class="font-medium text-slate-700">預期年通膨率</label>
+              <div class="flex items-center gap-1">
+                <input id="inflationRateNum" type="number" min="0" max="10" step="0.1" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">%</span>
+              </div>
+            </div>
+            <input id="inflationRate" type="range" min="0" max="6" step="0.1" class="w-full" />
+          </div>
+        </section>
+
+        <!-- 5. 外部退休現金流（選填） -->
+        <section class="space-y-3">
+          <div class="flex items-center gap-2 border-b border-slate-100 pb-2">
+            <i data-lucide="shield-check" class="h-4 w-4 text-teal-700"></i>
+            <h2 class="text-sm font-semibold text-slate-800">外部退休現金流（選填）</h2>
+          </div>
+
+          <div>
+            <div class="mb-1 flex items-center justify-between text-xs">
+              <label for="pensionMonthly" class="font-medium text-slate-700">勞保／勞退預估月領</label>
+              <div class="flex items-center gap-1">
+                <input id="pensionMonthlyNum" type="number" min="0" max="15" step="0.5" class="w-16 rounded-md border border-slate-200 px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-slate-500">萬</span>
+              </div>
+            </div>
+            <input id="pensionMonthly" type="range" min="0" max="8" step="0.5" class="w-full" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label for="pensionStartAgeNum" class="mb-1 block text-[11px] font-medium text-slate-600">請領起始年齡</label>
+              <div class="flex items-center gap-1">
+                <input id="pensionStartAgeNum" type="number" min="55" max="75" step="1" class="w-full rounded-md border border-slate-200 px-2 py-1 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-xs text-slate-500">歲</span>
+              </div>
+            </div>
+            <div>
+              <label for="otherPassiveMonthlyNum" class="mb-1 block text-[11px] font-medium text-slate-600">其他月被動收入</label>
+              <div class="flex items-center gap-1">
+                <input id="otherPassiveMonthlyNum" type="number" min="0" max="50" step="0.5" class="w-full rounded-md border border-slate-200 px-2 py-1 text-right text-xs font-semibold tabular-nums text-slate-900" />
+                <span class="text-xs text-slate-500">萬</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. 壓力測試 -->
+        <section class="rounded-xl border border-amber-200 bg-amber-50/70 p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="alert-triangle" class="h-4 w-4 text-amber-600"></i>
+              <span class="text-xs font-semibold text-amber-900">報酬順序風險壓力測試</span>
+            </div>
+            <label class="relative inline-flex cursor-pointer items-center">
+              <input id="stressTestEnabled" type="checkbox" checked class="peer sr-only" />
+              <div class="h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-amber-600 peer-checked:after:translate-x-full"></div>
+            </label>
+          </div>
+          <p class="text-[11px] leading-relaxed text-amber-800">
+            模擬退休首 3 年遭遇市場空頭（連 3 年每年 -10% 報酬），觀察資產壽命是否仍安全。
+          </p>
+          <div class="flex items-center justify-between text-xs">
+            <label for="stressDropPct" class="font-medium text-amber-900">衝擊期間年報酬</label>
+            <div class="flex items-center gap-1">
+              <input id="stressDropPct" type="number" min="-40" max="0" step="1" value="-10" class="w-16 rounded-md border border-amber-300 bg-white px-2 py-0.5 text-right text-xs font-semibold tabular-nums text-amber-900" />
+              <span class="text-amber-800">% / 年</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </aside>
+
+    <!-- Right Main Content -->
+    <div class="lg:col-span-8 xl:col-span-9 space-y-6">
+
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <!-- KPI 1 -->
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>退休時預估資產</span>
+            <span id="kpiModeBadge" class="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700">今日幣值</span>
+          </div>
+          <div id="kpiRetireAssets" class="mt-2 text-2xl font-bold tabular-nums text-slate-900">-- 萬元</div>
+          <div class="mt-2 flex items-center justify-between text-xs">
+            <span class="text-slate-500">FIRE 目標：<strong id="kpiFireTarget" class="tabular-nums text-slate-700">--</strong></span>
+            <span id="kpiGoalRateBadge" class="rounded-full px-2 py-0.5 text-[11px] font-semibold">--%</span>
+          </div>
+        </div>
+
+        <!-- KPI 2 -->
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>投資組合月提領需求</span>
+            <i data-lucide="banknote" class="h-4 w-4 text-slate-400"></i>
+          </div>
+          <div id="kpiNetMonthlyNeed" class="mt-2 text-2xl font-bold tabular-nums text-slate-900">-- 萬元</div>
+          <div class="mt-2 text-xs text-slate-500">
+            首年依設定提領率可領：<strong id="kpiSafeMonthly" class="tabular-nums text-teal-700">-- 萬元/月</strong>
+          </div>
+        </div>
+
+        <!-- KPI 3 -->
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>資產可支撐年齡</span>
+            <i data-lucide="hourglass" class="h-4 w-4 text-slate-400"></i>
+          </div>
+          <div id="kpiDepleteAge" class="mt-2 text-2xl font-bold tabular-nums text-emerald-700">-- 歲</div>
+          <div id="kpiEndBalanceText" class="mt-2 text-xs text-slate-500">--</div>
+        </div>
+
+        <!-- KPI 4 -->
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>FIRE 達標年齡</span>
+            <i data-lucide="flame" class="h-4 w-4 text-orange-500"></i>
+          </div>
+          <div id="kpiFireAge" class="mt-2 text-2xl font-bold tabular-nums text-slate-900">-- 歲</div>
+          <div id="kpiReverseHint" class="mt-2 text-xs text-slate-500">--</div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 pt-3">
+          <div class="flex gap-1" role="tablist">
+            <button type="button" data-tab="trajectory" class="tab-btn border-b-2 border-teal-700 px-4 py-2.5 text-sm font-semibold text-teal-800">
+              資產走勢與現金流
+            </button>
+            <button type="button" data-tab="sensitivity" class="tab-btn border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-800">
+              敏感度矩陣與目標反推
+            </button>
+            <button type="button" data-tab="table" class="tab-btn border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-800">
+              逐年明細表
+            </button>
+          </div>
+          <div id="tabStatusNote" class="pb-2 text-xs text-slate-500"></div>
+        </div>
+
+        <!-- Tab 1: Trajectory & Cashflow -->
+        <div id="panel-trajectory" class="tab-panel p-5 space-y-6">
+          <div>
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-800">全生命週期資產軌跡（多情境對比）</h3>
+                <p class="text-xs text-slate-500">涵蓋基準情境、樂觀（+2% 報酬）、保守（-2% 報酬）與報酬順序風險壓力測試</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-teal-700"></span>基準</span>
+                <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>樂觀 (+2%)</span>
+                <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-slate-400"></span>保守 (-2%)</span>
+                <span id="legendStress" class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>壓力測試</span>
+              </div>
+            </div>
+            <div class="relative h-80 w-full">
+              <canvas id="trajectoryChart"></canvas>
+            </div>
+          </div>
+
+          <div class="border-t border-slate-100 pt-5">
+            <div class="mb-3">
+              <h3 class="text-sm font-semibold text-slate-800">年度現金流結構（投入 vs. 提領與外部給付）</h3>
+              <p class="text-xs text-slate-500">檢視退休後外部給付如何減輕投資組合的提領壓力</p>
+            </div>
+            <div class="relative h-64 w-full">
+              <canvas id="cashflowChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Sensitivity & Reverse Calculator -->
+        <div id="panel-sensitivity" class="tab-panel hidden p-5 space-y-6">
+          <!-- Reverse Target Solver -->
+          <div class="rounded-xl border border-teal-200 bg-teal-50/50 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="text-sm font-semibold text-teal-900">退休目標反推試算</h3>
+                <p class="text-xs text-teal-700">設定你想達成的目標退休年齡，系統自動反推每月所需儲蓄金額</p>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <label for="desiredRetireAge" class="font-medium text-teal-900">期望退休年齡：</label>
+                <input id="desiredRetireAge" type="number" min="30" max="80" step="1" value="55" class="w-16 rounded-md border border-teal-300 bg-white px-2 py-1 text-right font-bold tabular-nums text-teal-900" />
+                <span class="text-teal-800">歲</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div class="rounded-lg bg-white p-3 border border-teal-100">
+                <div class="text-xs text-slate-500">對應 FIRE 目標資產（今日幣值）</div>
+                <div id="revTargetAssets" class="mt-1 text-lg font-bold tabular-nums text-slate-900">-- 萬元</div>
+              </div>
+              <div class="rounded-lg bg-white p-3 border border-teal-100">
+                <div class="text-xs text-slate-500">每月需定期投入</div>
+                <div id="revRequiredMonthly" class="mt-1 text-lg font-bold tabular-nums text-teal-700">-- 萬元</div>
+              </div>
+              <div class="rounded-lg bg-white p-3 border border-teal-100">
+                <div class="text-xs text-slate-500">與目前投入差距</div>
+                <div id="revGapMonthly" class="mt-1 text-lg font-bold tabular-nums text-slate-900">-- 萬元</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sensitivity Matrix -->
+          <div>
+            <div class="mb-3">
+              <h3 class="text-sm font-semibold text-slate-800">提領率 × 退休期報酬率 敏感度矩陣</h3>
+              <p class="text-xs text-slate-500">數值顯示在「預期壽命（<span id="matrixLifeAge">90</span> 歲）」時的期末剩餘資產（或耗盡年齡）</p>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+              <table id="sensitivityTable" class="w-full text-center text-xs tabular-nums">
+                <!-- Populated by JS -->
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Year-by-Year Table -->
+        <div id="panel-table" class="tab-panel hidden p-5 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-semibold text-slate-800">逐年資產模擬明細</h3>
+              <p class="text-xs text-slate-500">單位：新台幣萬元（依上方「實質購買力 / 名目金額」切換顯示）</p>
+            </div>
+            <select id="tableFilter" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+              <option value="all">顯示全部年份</option>
+              <option value="milestones">每 5 年及退休轉折點</option>
+              <option value="retired">僅顯示退休後年份</option>
+            </select>
+          </div>
+          <div class="max-h-[520px] overflow-auto rounded-xl border border-slate-200 custom-scrollbar">
+            <table class="w-full text-right text-xs tabular-nums">
+              <thead class="sticky top-0 bg-slate-100 text-slate-600 font-semibold">
+                <tr>
+                  <th class="px-3 py-2.5 text-center">年齡</th>
+                  <th class="px-3 py-2.5 text-center">階段</th>
+                  <th class="px-3 py-2.5">期初資產</th>
+                  <th class="px-3 py-2.5">年度投入</th>
+                  <th class="px-3 py-2.5">投資收益</th>
+                  <th class="px-3 py-2.5">外部給付</th>
+                  <th class="px-3 py-2.5">投資組合提領</th>
+                  <th class="px-3 py-2.5">期末資產</th>
+                </tr>
+              </thead>
+              <tbody id="yearlyTableBody" class="divide-y divide-slate-100 bg-white">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Default generic neutral parameters (zero personal data)
+    const DEFAULT_STATE = {
+      currentAge: 35,
+      retireAge: 60,
+      lifeExpectancy: 90,
+      currentAssets: 200,
+      monthlyContribution: 3.0,
+      contributionGrowth: 0,
+      targetMonthlyExpense: 6.0,
+      withdrawalRate: 4.0,
+      withdrawalStrategy: 'expense',
+      accumReturn: 7.0,
+      retireReturn: 4.5,
+      inflationRate: 2.5,
+      pensionMonthly: 2.0,
+      pensionStartAge: 65,
+      otherPassiveMonthly: 0,
+      stressTestEnabled: true,
+      stressDropPct: -10,
+      desiredRetireAge: 55,
+      displayMode: 'real' // 'real' or 'nominal'
+    };
+
+    const PRESETS = {
+      balanced: { ...DEFAULT_STATE },
+      fire: {
+        ...DEFAULT_STATE,
+        currentAge: 30,
+        retireAge: 48,
+        lifeExpectancy: 92,
+        currentAssets: 350,
+        monthlyContribution: 5.5,
+        contributionGrowth: 2.0,
+        targetMonthlyExpense: 5.5,
+        withdrawalRate: 3.8,
+        accumReturn: 8.0,
+        retireReturn: 5.0,
+        pensionMonthly: 1.5,
+        pensionStartAge: 65,
+        desiredRetireAge: 45
+      },
+      conservative: {
+        ...DEFAULT_STATE,
+        currentAge: 42,
+        retireAge: 65,
+        lifeExpectancy: 90,
+        currentAssets: 450,
+        monthlyContribution: 2.5,
+        contributionGrowth: 0,
+        targetMonthlyExpense: 5.0,
+        withdrawalRate: 3.5,
+        accumReturn: 5.0,
+        retireReturn: 3.5,
+        inflationRate: 2.5,
+        pensionMonthly: 2.5,
+        pensionStartAge: 65,
+        desiredRetireAge: 62
+      }
+    };
+
+    let state = { ...DEFAULT_STATE };
+    let trajectoryChartInstance = null;
+    let cashflowChartInstance = null;
+
+    const el = (id) => document.getElementById(id);
+
+    function showToast(msg) {
+      const toast = el('toast');
+      el('toastMessage').textContent = msg;
+      toast.classList.remove('hidden');
+      toast.classList.add('flex');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        toast.classList.add('hidden');
+        toast.classList.remove('flex');
+      }, 2400);
+    }
+
+    function fmtWan(val) {
+      if (!Number.isFinite(val)) return '-- 萬元';
+      const rounded = Math.round(val);
+      return rounded.toLocaleString('zh-TW') + ' 萬元';
+    }
+
+    function fmtWanDecimal(val) {
+      if (!Number.isFinite(val)) return '--';
+      return val.toLocaleString('zh-TW', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' 萬元';
+    }
+
+    // Core simulation engine (all calculations in nominal TWD 萬元, plus real discount factor)
+    function runSimulation(params, options = {}) {
+      const returnOffset = options.returnOffset || 0;
+      const applyStress = Boolean(options.applyStress);
+      const overrideRetireReturn = options.overrideRetireReturn;
+      const overrideWithdrawalRate = options.overrideWithdrawalRate;
+
+      const currentAge = Math.max(18, Math.min(80, Math.round(params.currentAge)));
+      const retireAge = Math.max(currentAge + 1, Math.min(90, Math.round(params.retireAge)));
+      const lifeExpectancy = Math.max(retireAge + 1, Math.min(105, Math.round(params.lifeExpectancy)));
+
+      const inf = Math.max(0, params.inflationRate) / 100;
+      const accumR = Math.max(-0.5, (params.accumReturn + returnOffset) / 100);
+      const baseRetireR = overrideRetireReturn !== undefined ? overrideRetireReturn : (params.retireReturn + returnOffset);
+      const retireR = Math.max(-0.5, baseRetireR / 100);
+      const wRate = Math.max(0.005, (overrideWithdrawalRate !== undefined ? overrideWithdrawalRate : params.withdrawalRate) / 100);
+      const contribG = Math.max(0, params.contributionGrowth) / 100;
+
+      let assets = Math.max(0, params.currentAssets);
+      let firstRetireAssetsNominal = null;
+      let firstRetireRealBase = null;
+      let fixedRealAnnualWithdrawBase = null;
+      let depleteAge = null;
+
+      const rows = [];
+
+      for (let age = currentAge; age <= lifeExpectancy; age++) {
+        const t = age - currentAge;
+        const discount = Math.pow(1 + inf, t);
+        const isRetired = age >= retireAge;
+        const startAssets = assets;
+
+        let annualContrib = 0;
+        let annualExternal = 0;
+        let annualWithdraw = 0;
+        let r = accumR;
+
+        if (!isRetired) {
+          annualContrib = params.monthlyContribution * 12 * Math.pow(1 + contribG, t);
+          r = accumR;
+        } else {
+          if (firstRetireAssetsNominal === null) {
+            firstRetireAssetsNominal = startAssets;
+            firstRetireRealBase = startAssets / discount;
+            fixedRealAnnualWithdrawBase = firstRetireRealBase * wRate;
+          }
+
+          const retireYearIdx = age - retireAge;
+          if (applyStress && retireYearIdx < 3) {
+            r = params.stressDropPct / 100;
+          } else {
+            r = retireR;
+          }
+
+          const pensionPart = age >= params.pensionStartAge ? params.pensionMonthly * 12 : 0;
+          const otherPart = params.otherPassiveMonthly * 12;
+          annualExternal = (pensionPart + otherPart) * discount;
+
+          if (params.withdrawalStrategy === 'expense') {
+            const targetAnnualNom = params.targetMonthlyExpense * 12 * discount;
+            annualWithdraw = Math.max(0, targetAnnualNom - annualExternal);
+          } else if (params.withdrawalStrategy === 'rate_fixed') {
+            annualWithdraw = fixedRealAnnualWithdrawBase * discount;
+          } else if (params.withdrawalStrategy === 'guardrails') {
+            const currentReal = startAssets / discount;
+            let guardMultiplier = 1.0;
+            if (firstRetireRealBase > 0) {
+              if (currentReal < firstRetireRealBase * 0.8) guardMultiplier = 0.9;
+              else if (currentReal > firstRetireRealBase * 1.2) guardMultiplier = 1.1;
+            }
+            annualWithdraw = fixedRealAnnualWithdrawBase * discount * guardMultiplier;
+          }
+        }
+
+        // Mid-year cashflow approximation for return
+        const investableBase = Math.max(0, startAssets + annualContrib * 0.5 - annualWithdraw * 0.5);
+        const investmentReturn = investableBase * r;
+        let endAssets = startAssets + annualContrib + investmentReturn - annualWithdraw;
+
+        if (endAssets <= 0) {
+          if (depleteAge === null && isRetired) {
+            depleteAge = age;
+          }
+          endAssets = 0;
+        }
+
+        rows.push({
+          age,
+          t,
+          isRetired,
+          discount,
+          startNominal: startAssets,
+          contribNominal: annualContrib,
+          returnNominal: investmentReturn,
+          externalNominal: annualExternal,
+          withdrawNominal: annualWithdraw,
+          endNominal: endAssets,
+          startReal: startAssets / discount,
+          contribReal: annualContrib / discount,
+          returnReal: investmentReturn / discount,
+          externalReal: annualExternal / discount,
+          withdrawReal: annualWithdraw / discount,
+          endReal: endAssets / discount
+        });
+
+        assets = endAssets;
+      }
+
+      const retireRow = rows.find((row) => row.age === retireAge) || rows[rows.length - 1];
+      const lastRow = rows[rows.length - 1];
+
+      return {
+        rows,
+        depleteAge,
+        retireRow,
+        lastRow,
+        firstRetireAssetsNominal: firstRetireAssetsNominal || 0,
+        firstRetireAssetsReal: firstRetireRealBase || 0
+      };
+    }
+
+    // Compute FIRE target in today's dollars
+    function computeFireTargetReal(params) {
+      const wRate = Math.max(0.005, params.withdrawalRate / 100);
+      // Net annual gap at retirement (considering pension if already eligible at retireAge, or conservative full gap)
+      const pensionAtRetire = params.retireAge >= params.pensionStartAge ? params.pensionMonthly : 0;
+      const netMonthlyGap = Math.max(0, params.targetMonthlyExpense - pensionAtRetire - params.otherPassiveMonthly);
+      return (netMonthlyGap * 12) / wRate;
+    }
+
+    // Find age when real assets first reach FIRE target
+    function findFireAge(params, fireTargetReal) {
+      if (fireTargetReal <= 0) return params.currentAge;
+      const inf = Math.max(0, params.inflationRate) / 100;
+      const accumR = Math.max(-0.5, params.accumReturn / 100);
+      const contribG = Math.max(0, params.contributionGrowth) / 100;
+      let assets = Math.max(0, params.currentAssets);
+      if (assets >= fireTargetReal) return params.currentAge;
+
+      for (let t = 0; t <= 70; t++) {
+        const discount = Math.pow(1 + inf, t);
+        const contrib = params.monthlyContribution * 12 * Math.pow(1 + contribG, t);
+        assets = assets + contrib + (assets + contrib * 0.5) * accumR;
+        const realAssets = assets / Math.pow(1 + inf, t + 1);
+        if (realAssets >= fireTargetReal) {
+          return params.currentAge + t + 1;
+        }
+      }
+      return null;
+    }
+
+    // Solve required monthly contribution to reach targetReal at desiredRetireAge
+    function solveMonthlyContribution(params, desiredAge, targetReal) {
+      const years = Math.max(1, desiredAge - params.currentAge);
+      const inf = Math.max(0, params.inflationRate) / 100;
+      const accumR = Math.max(-0.5, params.accumReturn / 100);
+      const contribG = Math.max(0, params.contributionGrowth) / 100;
+
+      // Binary search for monthly contribution
+      let low = 0;
+      let high = 200; // 200萬/月
+      for (let iter = 0; iter < 40; iter++) {
+        const mid = (low + high) / 2;
+        let assets = Math.max(0, params.currentAssets);
+        for (let t = 0; t < years; t++) {
+          const contrib = mid * 12 * Math.pow(1 + contribG, t);
+          assets = assets + contrib + (assets + contrib * 0.5) * accumR;
+        }
+        const realAssets = assets / Math.pow(1 + inf, years);
+        if (realAssets >= targetReal) high = mid;
+        else low = mid;
+      }
+      return high;
+    }
+
+    function updateDashboard() {
+      // Enforce logical age ordering
+      if (state.retireAge <= state.currentAge) {
+        state.retireAge = state.currentAge + 1;
+        syncInputsFromState();
+      }
+      if (state.lifeExpectancy <= state.retireAge) {
+        state.lifeExpectancy = state.retireAge + 1;
+        syncInputsFromState();
+      }
+
+      const isReal = state.displayMode === 'real';
+      const baseSim = runSimulation(state);
+      const optSim = runSimulation(state, { returnOffset: 2.0 });
+      const consSim = runSimulation(state, { returnOffset: -2.0 });
+      const stressSim = state.stressTestEnabled ? runSimulation(state, { applyStress: true }) : null;
+
+      const fireTargetReal = computeFireTargetReal(state);
+      const retireDiscount = Math.pow(1 + state.inflationRate / 100, state.retireAge - state.currentAge);
+      const retireAssetsShown = isReal ? baseSim.firstRetireAssetsReal : baseSim.firstRetireAssetsNominal;
+      const fireTargetShown = isReal ? fireTargetReal : fireTargetReal * retireDiscount;
+
+      // KPI 1
+      el('kpiModeBadge').textContent = isReal ? '今日幣值' : '名目金額';
+      el('kpiRetireAssets').textContent = fmtWan(retireAssetsShown);
+      el('kpiFireTarget').textContent = fmtWan(fireTargetShown);
+
+      const goalPct = fireTargetShown > 0 ? Math.round((retireAssetsShown / fireTargetShown) * 100) : 100;
+      const badge = el('kpiGoalRateBadge');
+      badge.textContent = `達成 ${goalPct}%`;
+      if (goalPct >= 100) {
+        badge.className = 'rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800';
+      } else if (goalPct >= 75) {
+        badge.className = 'rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800';
+      } else {
+        badge.className = 'rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-800';
+      }
+
+      // KPI 2
+      const pensionAtRetire = state.retireAge >= state.pensionStartAge ? state.pensionMonthly : 0;
+      const netMonthlyNeedReal = Math.max(0, state.targetMonthlyExpense - pensionAtRetire - state.otherPassiveMonthly);
+      const netMonthlyNeedShown = isReal ? netMonthlyNeedReal : netMonthlyNeedReal * retireDiscount;
+      const safeMonthlyReal = (baseSim.firstRetireAssetsReal * (state.withdrawalRate / 100)) / 12;
+      const safeMonthlyShown = isReal ? safeMonthlyReal : safeMonthlyReal * retireDiscount;
+
+      el('kpiNetMonthlyNeed').textContent = fmtWanDecimal(netMonthlyNeedShown) + ' / 月';
+      el('kpiSafeMonthly').textContent = fmtWanDecimal(safeMonthlyShown) + ' / 月';
+
+      // KPI 3
+      const depleteEl = el('kpiDepleteAge');
+      if (baseSim.depleteAge === null) {
+        depleteEl.textContent = `${state.lifeExpectancy}+ 歲`;
+        depleteEl.className = 'mt-2 text-2xl font-bold tabular-nums text-emerald-700';
+        const endVal = isReal ? baseSim.lastRow.endReal : baseSim.lastRow.endNominal;
+        let note = `${state.lifeExpectancy} 歲仍餘 ${fmtWan(endVal)}`;
+        if (stressSim && stressSim.depleteAge !== null) {
+          note += `（壓力測試於 ${stressSim.depleteAge} 歲耗盡）`;
+        }
+        el('kpiEndBalanceText').textContent = note;
+      } else {
+        depleteEl.textContent = `${baseSim.depleteAge} 歲耗盡`;
+        depleteEl.className = 'mt-2 text-2xl font-bold tabular-nums text-rose-600';
+        el('kpiEndBalanceText').textContent = `較預期壽命（${state.lifeExpectancy} 歲）提早 ${state.lifeExpectancy - baseSim.depleteAge} 年`;
+      }
+
+      // KPI 4: FIRE Age & reverse hint
+      const fireAge = findFireAge(state, fireTargetReal);
+      if (fireAge !== null) {
+        el('kpiFireAge').textContent = `${fireAge} 歲`;
+        const diff = state.retireAge - fireAge;
+        if (diff > 0) {
+          el('kpiReverseHint').textContent = `可望比預計提早 ${diff} 年達標`;
+        } else if (diff === 0) {
+          el('kpiReverseHint').textContent = `剛好於預計退休年齡達標`;
+        } else {
+          el('kpiReverseHint').textContent = `較預計退休年齡晚 ${Math.abs(diff)} 年達標`;
+        }
+      } else {
+        el('kpiFireAge').textContent = '尚未達標';
+        el('kpiReverseHint').textContent = '建議提高每月投入或調整目標花費';
+      }
+
+      el('tabStatusNote').textContent = `模擬區間：${state.currentAge} 歲 → ${state.lifeExpectancy} 歲（共 ${state.lifeExpectancy - state.currentAge} 年）`;
+      el('legendStress').style.display = state.stressTestEnabled ? 'inline-flex' : 'none';
+
+      renderTrajectoryChart(baseSim, optSim, consSim, stressSim, isReal);
+      renderCashflowChart(baseSim, isReal);
+      renderReverseSolver(fireTargetReal);
+      renderSensitivityMatrix();
+      renderYearlyTable(baseSim, isReal);
+    }
+
+    function renderTrajectoryChart(baseSim, optSim, consSim, stressSim, isReal) {
+      const ctx = el('trajectoryChart').getContext('2d');
+      const labels = baseSim.rows.map((r) => `${r.age}歲`);
+      const pick = (r) => Math.round(isReal ? r.endReal : r.endNominal);
+
+      const datasets = [
+        {
+          label: '基準情境',
+          data: baseSim.rows.map(pick),
+          borderColor: '#0f766e',
+          backgroundColor: 'rgba(15, 118, 110, 0.08)',
+          borderWidth: 2.5,
+          fill: true,
+          tension: 0.25,
+          pointRadius: 0,
+          pointHoverRadius: 5
+        },
+        {
+          label: '樂觀 (+2%)',
+          data: optSim.rows.map(pick),
+          borderColor: '#10b981',
+          borderWidth: 1.5,
+          borderDash: [5, 4],
+          fill: false,
+          tension: 0.25,
+          pointRadius: 0,
+          pointHoverRadius: 4
+        },
+        {
+          label: '保守 (-2%)',
+          data: consSim.rows.map(pick),
+          borderColor: '#94a3b8',
+          borderWidth: 1.5,
+          borderDash: [5, 4],
+          fill: false,
+          tension: 0.25,
+          pointRadius: 0,
+          pointHoverRadius: 4
+        }
+      ];
+
+      if (stressSim) {
+        datasets.push({
+          label: '壓力測試（報酬順序風險）',
+          data: stressSim.rows.map(pick),
+          borderColor: '#d97706',
+          borderWidth: 2,
+          borderDash: [3, 3],
+          fill: false,
+          tension: 0.25,
+          pointRadius: 0,
+          pointHoverRadius: 4
+        });
+      }
+
+      if (trajectoryChartInstance) trajectoryChartInstance.destroy();
+      trajectoryChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (c) => `${c.dataset.label}: ${c.parsed.y.toLocaleString('zh-TW')} 萬元`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { maxTicksLimit: 12, font: { size: 11 } }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                font: { size: 11 },
+                callback: (v) => v.toLocaleString('zh-TW') + ' 萬'
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderCashflowChart(baseSim, isReal) {
+      const ctx = el('cashflowChart').getContext('2d');
+      const labels = baseSim.rows.map((r) => `${r.age}歲`);
+      const contribData = baseSim.rows.map((r) => Math.round(isReal ? r.contribReal : r.contribNominal));
+      const externalData = baseSim.rows.map((r) => Math.round(isReal ? r.externalReal : r.externalNominal));
+      const withdrawData = baseSim.rows.map((r) => -Math.round(isReal ? r.withdrawReal : r.withdrawNominal));
+
+      if (cashflowChartInstance) cashflowChartInstance.destroy();
+      cashflowChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: '定期投入',
+              data: contribData,
+              backgroundColor: '#0f766e',
+              borderRadius: 2
+            },
+            {
+              label: '外部給付（勞保/被動收入）',
+              data: externalData,
+              backgroundColor: '#3b82f6',
+              borderRadius: 2
+            },
+            {
+              label: '投資組合提領',
+              data: withdrawData,
+              backgroundColor: '#f43f5e',
+              borderRadius: 2
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { boxWidth: 10, font: { size: 11 } }
+            },
+            tooltip: {
+              callbacks: {
+                label: (c) => `${c.dataset.label}: ${Math.abs(c.parsed.y).toLocaleString('zh-TW')} 萬元/年`
+              }
+            }
+          },
+          scales: {
+            x: {
+              stacked: true,
+              grid: { display: false },
+              ticks: { maxTicksLimit: 12, font: { size: 11 } }
+            },
+            y: {
+              stacked: true,
+              ticks: {
+                font: { size: 11 },
+                callback: (v) => v.toLocaleString('zh-TW') + ' 萬'
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderReverseSolver(fireTargetReal) {
+      const desiredAge = Math.max(state.currentAge + 1, Math.min(85, Math.round(state.desiredRetireAge)));
+      const reqMonthly = solveMonthlyContribution(state, desiredAge, fireTargetReal);
+      const diff = reqMonthly - state.monthlyContribution;
+
+      el('revTargetAssets').textContent = fmtWan(fireTargetReal);
+      el('revRequiredMonthly').textContent = fmtWanDecimal(reqMonthly) + ' / 月';
+
+      const gapEl = el('revGapMonthly');
+      if (diff <= 0) {
+        gapEl.textContent = `已達標（餘裕 ${Math.abs(diff).toFixed(1)} 萬/月）`;
+        gapEl.className = 'mt-1 text-lg font-bold tabular-nums text-emerald-700';
+      } else {
+        gapEl.textContent = `需增加 +${diff.toFixed(1)} 萬元 / 月`;
+        gapEl.className = 'mt-1 text-lg font-bold tabular-nums text-rose-600';
+      }
+    }
+
+    function renderSensitivityMatrix() {
+      el('matrixLifeAge').textContent = state.lifeExpectancy;
+      const wRates = [3.0, 3.5, 4.0, 4.5, 5.0, 5.5];
+      const rRates = [2.5, 3.5, 4.5, 5.5, 6.5];
+      const isReal = state.displayMode === 'real';
+
+      let html = '<thead class="bg-slate-100 text-slate-700"><tr><th class="px-3 py-2.5 text-left">提領率 \\ 退休報酬率</th>';
+      rRates.forEach((rr) => {
+        html += `<th class="px-3 py-2.5">${rr.toFixed(1)}%</th>`;
+      });
+      html += '</tr></thead><tbody class="divide-y divide-slate-100">';
+
+      wRates.forEach((wr) => {
+        html += `<tr><td class="bg-slate-50 px-3 py-2.5 text-left font-semibold text-slate-700">${wr.toFixed(1)}%</td>`;
+        rRates.forEach((rr) => {
+          const sim = runSimulation(
+            { ...state, withdrawalStrategy: 'rate_fixed' },
+            { overrideRetireReturn: rr, overrideWithdrawalRate: wr }
+          );
+          let cellText = '';
+          let cellClass = '';
+          if (sim.depleteAge !== null) {
+            cellText = `${sim.depleteAge} 歲耗盡`;
+            cellClass = 'bg-rose-50 text-rose-700 font-medium';
+          } else {
+            const val = isReal ? sim.lastRow.endReal : sim.lastRow.endNominal;
+            cellText = `${Math.round(val).toLocaleString('zh-TW')} 萬`;
+            cellClass = val > 500 ? 'bg-emerald-50 text-emerald-800 font-semibold' : 'bg-amber-50 text-amber-800 font-medium';
+          }
+          html += `<td class="px-3 py-2.5 ${cellClass}">${cellText}</td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</tbody>';
+      el('sensitivityTable').innerHTML = html;
+    }
+
+    function renderYearlyTable(baseSim, isReal) {
+      const filter = el('tableFilter').value;
+      const tbody = el('yearlyTableBody');
+      const filtered = baseSim.rows.filter((r) => {
+        if (filter === 'retired') return r.isRetired;
+        if (filter === 'milestones') {
+          return r.age === state.currentAge || r.age === state.retireAge || r.age === state.lifeExpectancy || r.age % 5 === 0;
+        }
+        return true;
+      });
+
+      tbody.innerHTML = filtered.map((r) => {
+        const s = Math.round(isReal ? r.startReal : r.startNominal).toLocaleString('zh-TW');
+        const c = Math.round(isReal ? r.contribReal : r.contribNominal).toLocaleString('zh-TW');
+        const ret = Math.round(isReal ? r.returnReal : r.returnNominal).toLocaleString('zh-TW');
+        const ext = Math.round(isReal ? r.externalReal : r.externalNominal).toLocaleString('zh-TW');
+        const w = Math.round(isReal ? r.withdrawReal : r.withdrawNominal).toLocaleString('zh-TW');
+        const e = Math.round(isReal ? r.endReal : r.endNominal).toLocaleString('zh-TW');
+        const isRetireYear = r.age === state.retireAge;
+        const rowBg = isRetireYear ? 'bg-teal-50/70 font-semibold' : '';
+        const stageBadge = r.isRetired
+          ? '<span class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">提領期</span>'
+          : '<span class="rounded bg-teal-100 px-1.5 py-0.5 text-[10px] font-medium text-teal-800">累積期</span>';
+
+        return `<tr class="${rowBg} hover:bg-slate-50">
+          <td class="px-3 py-2 text-center">${r.age} 歲</td>
+          <td class="px-3 py-2 text-center">${stageBadge}</td>
+          <td class="px-3 py-2">${s}</td>
+          <td class="px-3 py-2 text-teal-700">${r.contribNominal > 0 ? '+' + c : '0'}</td>
+          <td class="px-3 py-2 ${r.returnNominal >= 0 ? 'text-emerald-700' : 'text-rose-600'}">${r.returnNominal >= 0 ? '+' + ret : ret}</td>
+          <td class="px-3 py-2 text-blue-700">${ext}</td>
+          <td class="px-3 py-2 text-rose-600">${r.withdrawNominal > 0 ? '-' + w : '0'}</td>
+          <td class="px-3 py-2 font-semibold text-slate-900">${e}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Bind slider + number pairs
+    const PAIR_FIELDS = [
+      'currentAge', 'retireAge', 'lifeExpectancy',
+      'currentAssets', 'monthlyContribution', 'contributionGrowth',
+      'targetMonthlyExpense', 'withdrawalRate',
+      'accumReturn', 'retireReturn', 'inflationRate',
+      'pensionMonthly'
+    ];
+
+    function syncInputsFromState() {
+      PAIR_FIELDS.forEach((key) => {
+        if (el(key)) el(key).value = state[key];
+        if (el(key + 'Num')) el(key + 'Num').value = state[key];
+      });
+      el('pensionStartAgeNum').value = state.pensionStartAge;
+      el('otherPassiveMonthlyNum').value = state.otherPassiveMonthly;
+      el('withdrawalStrategy').value = state.withdrawalStrategy;
+      el('stressTestEnabled').checked = state.stressTestEnabled;
+      el('stressDropPct').value = state.stressDropPct;
+      el('desiredRetireAge').value = state.desiredRetireAge;
+
+      // Update display mode buttons
+      if (state.displayMode === 'real') {
+        el('btnRealMode').className = 'rounded-md bg-white px-3 py-1.5 text-teal-800 shadow-sm transition';
+        el('btnNominalMode').className = 'rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900 transition';
+      } else {
+        el('btnNominalMode').className = 'rounded-md bg-white px-3 py-1.5 text-teal-800 shadow-sm transition';
+        el('btnRealMode').className = 'rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900 transition';
+      }
+    }
+
+    function attachListeners() {
+      PAIR_FIELDS.forEach((key) => {
+        const rangeEl = el(key);
+        const numEl = el(key + 'Num');
+        if (rangeEl) {
+          rangeEl.addEventListener('input', (e) => {
+            state[key] = parseFloat(e.target.value) || 0;
+            if (numEl) numEl.value = state[key];
+            updateDashboard();
+          });
+        }
+        if (numEl) {
+          numEl.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (!Number.isNaN(val)) {
+              state[key] = val;
+              if (rangeEl) rangeEl.value = val;
+              updateDashboard();
+            }
+          });
+        }
+      });
+
+      el('pensionStartAgeNum').addEventListener('input', (e) => {
+        state.pensionStartAge = parseFloat(e.target.value) || 65;
+        updateDashboard();
+      });
+      el('otherPassiveMonthlyNum').addEventListener('input', (e) => {
+        state.otherPassiveMonthly = parseFloat(e.target.value) || 0;
+        updateDashboard();
+      });
+      el('withdrawalStrategy').addEventListener('change', (e) => {
+        state.withdrawalStrategy = e.target.value;
+        updateDashboard();
+      });
+      el('stressTestEnabled').addEventListener('change', (e) => {
+        state.stressTestEnabled = e.target.checked;
+        updateDashboard();
+      });
+      el('stressDropPct').addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (!Number.isNaN(val)) {
+          state.stressDropPct = val;
+          updateDashboard();
+        }
+      });
+      el('desiredRetireAge').addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (!Number.isNaN(val)) {
+          state.desiredRetireAge = val;
+          updateDashboard();
+        }
+      });
+      el('tableFilter').addEventListener('change', updateDashboard);
+
+      // Display Mode
+      el('btnRealMode').addEventListener('click', () => {
+        state.displayMode = 'real';
+        syncInputsFromState();
+        updateDashboard();
+      });
+      el('btnNominalMode').addEventListener('click', () => {
+        state.displayMode = 'nominal';
+        syncInputsFromState();
+        updateDashboard();
+      });
+
+      // Presets
+      document.querySelectorAll('.preset-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const presetKey = btn.dataset.preset;
+          if (PRESETS[presetKey]) {
+            state = { ...PRESETS[presetKey], displayMode: state.displayMode };
+            syncInputsFromState();
+            updateDashboard();
+            showToast(`已套用「${btn.textContent.trim()}」參數範本`);
+          }
+        });
+      });
+
+      // Tabs
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const target = btn.dataset.tab;
+          document.querySelectorAll('.tab-btn').forEach((b) => {
+            b.className = 'tab-btn border-b-2 border-transparent px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-800';
+          });
+          btn.className = 'tab-btn border-b-2 border-teal-700 px-4 py-2.5 text-sm font-semibold text-teal-800';
+          document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
+          el('panel-' + target).classList.remove('hidden');
+        });
+      });
+
+      // Export JSON
+      el('btnExport').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'retirement_simulation_config.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast('已匯出模擬設定檔 (JSON)');
+      });
+
+      // Import JSON
+      el('btnImport').addEventListener('click', () => el('importFileInput').click());
+      el('importFileInput').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const parsed = JSON.parse(ev.target.result);
+            state = { ...DEFAULT_STATE, ...parsed };
+            syncInputsFromState();
+            updateDashboard();
+            showToast('已成功匯入設定檔');
+          } catch (err) {
+            showToast('JSON 格式錯誤，無法匯入');
+          }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+      });
+
+      // Reset
+      el('btnReset').addEventListener('click', () => {
+        state = { ...DEFAULT_STATE };
+        syncInputsFromState();
+        updateDashboard();
+        showToast('已重設為預設通用參數');
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      if (window.lucide) lucide.createIcons();
+      syncInputsFromState();
+      attachListeners();
+      updateDashboard();
+    });
+  </script>
+</body>
+</html>
